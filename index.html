@@ -432,9 +432,15 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
       let w = Math.round(W * Math.min(dpr, 2)), h = Math.round(H * Math.min(dpr, 2)); const f = Math.min(1, 2048 / Math.max(w, h)); w = Math.round(w * f); h = Math.round(h * f);
       const bbox = [X0 + x0, Y0 - y1, X0 + x1, Y0 - y0].map(v => v.toFixed(2)).join(",");
       const img = new Image(), snapV = { s, tx, ty, W, H };
-      img.onload = () => { orto = { img, ...snapV }; noteEl().hidden = true; req(); };
-      img.onerror = () => { showNote("Ortofoto sa zobrazí vo zverejnenej verzii aplikácie na webe."); };
-      img.src = `${ORTO_URL}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=1&STYLES=&SRS=EPSG:5514&BBOX=${bbox}&WIDTH=${w}&HEIGHT=${h}&FORMAT=image/jpeg`;
+      const url = `${ORTO_URL}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=1&STYLES=&SRS=EPSG:5514&BBOX=${bbox}&WIDTH=${w}&HEIGHT=${h}&FORMAT=image/jpeg`;
+      const fail = () => showNote("Ortofoto sa nepodarilo načítať. Skúste to o chvíľu znova.");
+      // služba ÚGKK obrázok cez <img> z iných domén neposiela, cez fetch (CORS) áno
+      fetch(url).then(r => { if (!r.ok) throw 0; return r.blob(); }).then(b => {
+        if (!/^image\//.test(b.type)) throw 0;
+        const ou = URL.createObjectURL(b);
+        img.onload = () => { if (orto && orto.ou) URL.revokeObjectURL(orto.ou); orto = { img, ou, ...snapV }; noteEl().hidden = true; req(); };
+        img.onerror = fail; img.src = ou;
+      }).catch(fail);
     }, 180);
   }
   const box = document.getElementById("mapbox"), cv = document.getElementById("map"), ctx = cv.getContext("2d");
