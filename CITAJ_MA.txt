@@ -1,0 +1,11 @@
+Mapová aplikácia – Opatrenia pre životné prostredie v obciach (statický web)
+
+Obsah:
+  index.html            aplikácia (hexagóny, katastre, envirozáťaže sú v nej priamo)
+  data/parcely/*.bin    parcely registra C KN po katastrálnych územiach (načítavajú sa pri priblížení)
+  web.config, .htaccess nastavenie typu súborov .bin pre servery IIS a Apache
+
+Nasadenie: celý obsah priečinka nahrajte do jedného priečinka na webe (napr. urbin.sk/mapa-zp/).
+Nepotrebuje databázu ani skripty na serveri. Stránka musí bežať cez https.
+Podklad Ortofoto sa načítava zo služby WMS ÚGKK SR (zbgisws.skgeodesy.sk).
+Aplikácia nefunguje pri otvorení dvojklikom z disku (parcely sa nenačítajú) – len cez webový server.
