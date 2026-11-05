@@ -372,17 +372,17 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
     const head = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, hl))); let p = 4 + hl;
     const rv = () => { let r = 0, m = 1, b; do { b = u[p++]; r += (b & 0x7f) * m; m *= 128; } while (b & 0x80); return r; };
     const zz = () => { const v = rv(); return v % 2 ? -(v + 1) / 2 : v / 2; };
-    const path = new Path2D(), parc = [];
+    const parc = [];
     for (let i = 0; i < head.num.length; i++) {
       const rings = []; let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
       for (let r = 0; r < head.nr[i]; r++) { const n = zz(), arr = new Float64Array(2 * n); let x = 0, y = 0;
         for (let j = 0; j < n; j++) { x += zz(); y += zz(); const X = x / 10, Y = y / 10; arr[2 * j] = X; arr[2 * j + 1] = Y; if (X < a) a = X; if (X > c) c = X; if (Y < b) b = Y; if (Y > d) d = Y; }
-        rings.push(arr); path.moveTo(arr[0], arr[1]); for (let j = 1; j < n; j++) path.lineTo(arr[2 * j], arr[2 * j + 1]); path.closePath(); }
+        rings.push(arr); }
       if (!rings.length) continue;
       let lx = 0, ly = 0; const r0 = rings[0] || []; for (let j = 0; j < r0.length; j += 2) { lx += r0[j]; ly += r0[j + 1]; } const nn = r0.length / 2 || 1;
       parc.push({ num: head.num[i], drp: head.drp[head.d[i]], vym: head.v[i], rings, bb: [a, b, c, d], lp: [lx / nn, ly / nn] });
     }
-    return { path, parc };
+    return { parc };
   }
   function ensureParc(k) {
     if (PC[k]) return PC[k].p;
@@ -407,10 +407,17 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
     return hs;
   }
   const ringsPath = (p, rings) => { for (const r of rings) { p.moveTo(r[0], r[1]); for (let j = 2; j < r.length; j += 2) p.lineTo(r[j], r[j + 1]); p.closePath(); } };
+  // parcely v malých štvorcoch (~300 m): Chrome spomaľuje jeden obrovský Path2D a kresliť sa dajú len viditeľné štvorce
+  const CELL = 300;
   function prepParc(d) {
-    d.spot = [0, 1, 2].map(() => [new Path2D(), new Path2D()]);
+    const cells = new Map();
     for (const P of d.parc) { P.hx = parcHexes(P); const n = P.hx.length || 1;
-      for (let g = 0; g < 3; g++) { const sh = P.hx.filter(h => SPOT[g][h]).length / n; if (sh >= 0.5) ringsPath(d.spot[g][0], P.rings); else if (sh >= 0.25) ringsPath(d.spot[g][1], P.rings); } }
+      const key = Math.floor(P.lp[0] / CELL) + ":" + Math.floor(P.lp[1] / CELL);
+      let c = cells.get(key); if (!c) { c = { bb: [Infinity, Infinity, -Infinity, -Infinity], path: new Path2D(), spot: [0, 1, 2].map(() => [new Path2D(), new Path2D()]) }; cells.set(key, c); }
+      const b = c.bb, q = P.bb; if (q[0] < b[0]) b[0] = q[0]; if (q[1] < b[1]) b[1] = q[1]; if (q[2] > b[2]) b[2] = q[2]; if (q[3] > b[3]) b[3] = q[3];
+      ringsPath(c.path, P.rings);
+      for (let g = 0; g < 3; g++) { const sh = P.hx.filter(h => SPOT[g][h]).length / n; if (sh >= 0.5) ringsPath(c.spot[g][0], P.rings); else if (sh >= 0.25) ringsPath(c.spot[g][1], P.rings); } }
+    d.cells = [...cells.values()];
   }
   function selectParcel(k, i, zoom) {
     const P = PC[k].d.parc[i], hs = P.hx || parcHexes(P);
@@ -492,10 +499,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
     ctx.strokeStyle = cv_("--ink"); ctx.lineWidth = 2 / s; ctx.stroke(KRP);
     if (s >= PARC_S) {
       const vx0 = -tx / s, vx1 = (W - tx) / s, vy0 = -ty / s, vy1 = (H - ty) / s;
-      const vis = []; KU.forEach((k, i) => { const b = k.bb; if (b[2] < vx0 || b[0] > vx1 || b[3] < vy0 || b[1] > vy1) return; const e = PC[i]; if (!e) { ensureParc(i).catch(() => {}); return; } if (e.st === "ok") vis.push(e.d); });
+      const vis = []; KU.forEach((k, i) => { const b = k.bb; if (b[2] < vx0 || b[0] > vx1 || b[3] < vy0 || b[1] > vy1) return; const e = PC[i]; if (!e) { ensureParc(i).catch(() => {}); return; }
+        if (e.st === "ok") for (const c of e.d.cells) { const q = c.bb; if (!(q[2] < vx0 || q[0] > vx1 || q[3] < vy0 || q[1] > vy1)) vis.push(c); } });
       ctx.fillStyle = cv_("--spot"); for (const d of vis) { ctx.globalAlpha = ob ? 0.6 : 0.72; ctx.fill(d.spot[G][0]); ctx.globalAlpha = ob ? 0.35 : 0.4; ctx.fill(d.spot[G][1]); } ctx.globalAlpha = 1;
       const lw = (s > 0.5 ? 1.1 : 0.8) / s;
-      ctx.lineWidth = lw * 2.6; ctx.strokeStyle = ob ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.9)"; for (const d of vis) ctx.stroke(d.path);
+      if (s >= 0.45 || vis.length < 60) { ctx.lineWidth = lw * 2.6; ctx.strokeStyle = ob ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.9)"; for (const d of vis) ctx.stroke(d.path); }
       ctx.lineWidth = lw; ctx.strokeStyle = ob ? "#FFFFFF" : "rgba(27,36,32,0.85)"; for (const d of vis) ctx.stroke(d.path);
     }
     if (selParc && mode === "parc") { const p = new Path2D(); for (const r of selParc.rings) { p.moveTo(r[0], r[1]); for (let j = 2; j < r.length; j += 2) p.lineTo(r[j], r[j + 1]); p.closePath(); }
