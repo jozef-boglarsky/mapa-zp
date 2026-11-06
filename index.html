@@ -451,6 +451,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
     }, 180);
   }
   const box = document.getElementById("mapbox"), cv = document.getElementById("map"), ctx = cv.getContext("2d");
+  const lay = document.createElement("canvas"), lctx = lay.getContext("2d");
   let W = 0, H = 0, dpr = 1, s = 0.01, tx = 0, ty = 0;
   const hexMode = () => DX * s >= 4;
   function fit(bb, pad) { const w = bb[2] - bb[0], h = bb[3] - bb[1]; s = Math.min((W - 2 * pad) / w, (H - 2 * pad - 60) / h); tx = W / 2 - (bb[0] + w / 2) * s; ty = (H + 50) / 2 - (bb[1] + h / 2) * s; }
@@ -475,7 +476,15 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
     const pz = s >= PARC_S;
     ctx.globalAlpha = ob ? (hm ? 0.22 : 0.45) : (pz ? 0.35 : hm ? 0.55 : 1);
     const vx0_ = -tx / s, vx1_ = (W - tx) / s, vy0_ = -ty / s, vy1_ = (H - ty) / s, visK = KU.filter(k => !(k.bb[2] < vx0_ || k.bb[0] > vx1_ || k.bb[3] < vy0_ || k.bb[1] > vy1_));
-    if (s > 0.05) { for (const k of visK) { if (!k.cp) continue; ctx.fillStyle = cv_("--n" + k.cp[G]); ctx.fill(k.path); } }
+    if (s > 0.05) {
+      // farby katastrov sa kreslia nepriehľadne do pomocnej vrstvy; pri parcelách sa navrch dokreslia parcely farbou ich katastra,
+      // aby hranice KÚ (iný zdroj ako KN) nerobili pásiky. Celá vrstva sa potom vloží s priehľadnosťou.
+      if (lay.width !== cv.width || lay.height !== cv.height) { lay.width = cv.width; lay.height = cv.height; }
+      lctx.setTransform(1, 0, 0, 1, 0, 0); lctx.clearRect(0, 0, lay.width, lay.height); lctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * tx, dpr * ty);
+      for (const k of visK) { if (!k.cp) continue; lctx.fillStyle = cv_("--n" + k.cp[G]); lctx.fill(k.path); }
+      if (pz) for (const k of visK) { if (!k.cp) continue; const e = PC[KU.indexOf(k)]; if (!e || e.st !== "ok") continue; lctx.fillStyle = cv_("--n" + k.cp[G]);
+        for (const c of e.d.cells) { const q = c.bb; if (!(q[2] < vx0_ || q[0] > vx1_ || q[3] < vy0_ || q[1] > vy1_)) lctx.fill(c.path); } }
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(lay, 0, 0); ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * tx, dpr * ty); }
     else for (let c = 0; c < 3; c++) { ctx.fillStyle = cv_("--n" + c); ctx.fill(KUBY[G][c]); }
     ctx.globalAlpha = 1;
     if (hm && !pz) {
@@ -490,7 +499,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
       ctx.fillStyle = cv_("--spot"); ctx.globalAlpha = 0.7; ctx.fill(P, "nonzero"); ctx.globalAlpha = 1;
       }
     }
-    ctx.strokeStyle = cv_("--map-line"); ctx.lineWidth = (s > 0.02 ? 1.3 : 0.7) / s; if (s > 0.05) { for (const k of visK) ctx.stroke(k.path); } else ctx.stroke(KUALL);
+    ctx.strokeStyle = cv_("--map-line"); ctx.lineWidth = (s > 0.02 ? 1.3 : 0.7) / s; if (s > 0.05) { for (const k of visK) { if (pz) { const e = PC[KU.indexOf(k)]; if (e && e.st === "ok") continue; } ctx.stroke(k.path); } } else ctx.stroke(KUALL);
     if (s > 0.008) { ctx.strokeStyle = bm === "orto" && orto ? "#FFFFFF" : cv_("--map-zuo"); ctx.lineWidth = 1.6 / s;
       if (s > 0.03) { const vx0 = -tx / s, vx1 = (W - tx) / s, vy0 = -ty / s, vy1 = (H - ty) / s; ctx.setLineDash([5 / s, 3 / s]);
         for (const z of ZU) { const b = z.bb; if (b[2] < vx0 || b[0] > vx1 || b[3] < vy0 || b[1] > vy1) continue; ctx.stroke(z.path); } ctx.setLineDash([]); }
